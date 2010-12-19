@@ -69,7 +69,8 @@ class KafkaConfig(props: Properties) extends ZKConfig(props) {
   /* enable zookeeper registration in the server */
   val enableZookeeper = Utils.getBoolean(props, "enable.zookeeper", true)
 
-  /* the maximum time in ms that a message in selected topics is kept in memory before flushed to disk, e.g., topic1:3000,topic2: 6000  */
+  /* the maximum time in ms that a message in selected topics is kept in memory before flushed to disk, e.g., */
+  /* topic1:3000,topic2: 6000 */
   val flushIntervalMap = Utils.getTopicFlushIntervals(Utils.getString(props, "topic.flush.intervals.ms", ""))
 
   /* the frequency in ms that the log flusher checks whether any log needs to be flushed to disk */
@@ -80,4 +81,7 @@ class KafkaConfig(props: Properties) extends ZKConfig(props) {
 
    /* the number of partitions for selected topics, e.g., topic1:8,topic2:16 */
   val topicPartitionsMap = Utils.getTopicPartitions(Utils.getString(props, "topic.partition.count.map", ""))
+
+  /* the sub-topic for a particular topic, that this broker hosts, e.g., test/part-0, test/part-1 */
+  val topicOwnershipList = Utils.getTopicPartitions(Utils.getString(props, "topic.ownership.list", ""))
 }

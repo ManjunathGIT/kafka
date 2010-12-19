@@ -51,6 +51,7 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
   
   override def setUp() {
     super.setUp()
+    Thread.sleep(1000)
   }
   
   def testBasic() {

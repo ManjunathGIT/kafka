@@ -66,8 +66,10 @@ class KafkaZooKeeper(config: KafkaConfig, logManager: LogManager) {
     val brokerTopicPath = ZkUtils.brokerTopicsPath + "/" + topic + "/" + config.brokerId
     val numParts = logManager.getTopicPartitionsMap.getOrElse(topic, config.numPartitions)
     logger.info("Begin registering broker topic " + brokerTopicPath + " with " + numParts.toString + " partitions")
+    println("Begin registering broker topic " + brokerTopicPath + " with " + numParts.toString + " partitions")
     ZkUtils.createEphemeralPathExpectConflict(zkClient, brokerTopicPath, numParts.toString)
     logger.info("End registering broker topic " + brokerTopicPath)
+    println("End registering broker topic " + brokerTopicPath)
   }
 
   /**

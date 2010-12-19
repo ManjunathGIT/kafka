@@ -22,6 +22,7 @@ import kafka.utils.SystemTime
 import kafka.TestUtils
 import kafka.server.{KafkaServer, KafkaConfig}
 import org.apache.log4j.Level
+import kafka.common.InvalidTopicNameException
 
 class KafkaProducerTest extends TestCase {
   private var messageBytes =  new Array[Byte](2);
@@ -36,6 +37,35 @@ class KafkaProducerTest extends TestCase {
 
   override def tearDown() {
     server.shutdown
+  }
+
+  def testInvalidTopicName() {
+    val producer = new SimpleProducer("DOES_NOT_MATTER", 9092, 100*1024, 300, 1000)
+    var failed = false
+
+    try {
+      producer.send("test-topic", new ByteBufferMessageSet(new Message(messageBytes)))
+    }catch {
+      case e:InvalidTopicNameException => failed = true
+    }
+
+    Assert.assertTrue(failed)
+
+    try {
+      producer.send("topic/subTopic1/subTopic2", new ByteBufferMessageSet(new Message(messageBytes)))
+    }catch {
+      case e:InvalidTopicNameException => failed = true
+    }
+
+    Assert.assertTrue(failed)
+
+    try {
+      producer.send("test--topic", new ByteBufferMessageSet(new Message(messageBytes)))
+    }catch {
+      case e:InvalidTopicNameException => failed = true
+    }
+
+//    Assert.assertFalse(failed)
   }
 
   def testUnreachableServer() {

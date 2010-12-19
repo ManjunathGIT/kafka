@@ -40,7 +40,7 @@ class Pool[K,V] extends Iterable[(K, V)] {
   
   def remove(key: K): V = pool.remove(key)
   
-  def keys = JavaConversions.asSet(pool.keySet())
+  def keys: collection.mutable.Set[K] = JavaConversions.asSet(pool.keySet())
   
   def values: Iterable[V] = 
     JavaConversions.asIterable(new ArrayList[V](pool.values()))

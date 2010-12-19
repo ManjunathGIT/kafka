@@ -25,8 +25,8 @@ import kafka.network._
 import kafka.message._
 import kafka.server._
 import kafka.api._
-import kafka.common.{WrongPartitionException, ErrorMapping}
 import kafka.utils.SystemTime
+import kafka.common.{InvalidTopicNameException, WrongPartitionException, ErrorMapping}
 
 /**
  * Logic to handle the various Kafka requests
@@ -86,7 +86,21 @@ class KafkaRequestHandlers(val logManager: LogManager) {
   def handleFetchRequest(request: Receive): Option[Send] = {
     if(logger.isTraceEnabled)
       logger.trace("Handling fetch request")
-    val fetchRequest = FetchRequest.readFrom(request.buffer)
+    var fetchRequest = FetchRequest.readFrom(request.buffer)
+    // if topic in the fetch request does not mention the sub-topic, find the right
+    // sub-topic from the log manager and concatenate it to the topic
+    if(!fetchRequest.topic.contains("/")) {
+      val subTopics = logManager.getSubTopics(fetchRequest.topic).toList
+      subTopics.size match {
+        case 0 => throw new InvalidTopicNameException("At least one subtopic should exist for topic: " + fetchRequest.topic)
+        case 1 => fetchRequest = new FetchRequest(fetchRequest.topic + "/" + subTopics.head, fetchRequest.partition,
+                                                  fetchRequest.offset, fetchRequest.maxSize)
+        logger.info("Modifying topic from " + fetchRequest.topic + " to " + fetchRequest.topic + "/" + subTopics.head)
+        case _ => throw new InvalidTopicNameException("Please specify the sub topic you want to fetch from: "
+                                                        + subTopics.toString)
+
+      }
+    }
     Some(readMessageSet(fetchRequest))
   }
   
@@ -94,6 +108,7 @@ class KafkaRequestHandlers(val logManager: LogManager) {
     if(logger.isTraceEnabled)
       logger.trace("Handling multifetch request")
     val multiFetchRequest = MultiFetchRequest.readFrom(request.buffer)
+    logger.info("Multi fetch request : " + multiFetchRequest.toString)
     var responses = multiFetchRequest.fetches.map(fetch =>
         readMessageSet(fetch)).toList
     

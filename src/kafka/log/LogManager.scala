@@ -65,10 +65,10 @@ class LogManager(val config: KafkaConfig,
       } else {
         logger.info("Loading log '" + dir.getName() + "'")
         val log = new Log(dir, maxSize, flushInterval)
-        val topicPartion = Utils.getTopicPartition(dir.getName)
-        logs.putIfNotExists(topicPartion._1, new Pool[Int, Log]())
-        val parts = logs.get(topicPartion._1)
-        parts.put(topicPartion._2, log)
+        val topicPartition = Utils.getTopicPartition(dir.getName)
+        logs.putIfNotExists(topicPartition._1, new Pool[Int, Log]())
+        val parts = logs.get(topicPartition._1)
+        parts.put(topicPartition._2, log)
       }
     }
   }
@@ -82,8 +82,6 @@ class LogManager(val config: KafkaConfig,
     logger.info("starting log cleaner every " + logCleanupIntervalMs + " ms")    
     scheduler.scheduleWithRate(cleanupLogs, 60 * 1000, logCleanupIntervalMs)
   }
-
-
 
   if(config.enableZookeeper) {
     kafkaZookeeper = new KafkaZooKeeper(config, this)
@@ -161,17 +159,26 @@ class LogManager(val config: KafkaConfig,
               (topicPartitionsMap.getOrElse(topic, numPartitions) - 1) + ")")
       throw new WrongPartitionException("wrong partition " + partition)
     }
+
+    // process a hiearchical topic name
+    var flattenedTopic = topic
+    // if topic is not hierarchical, then assign broker id as the default sub topic
+    if(!flattenedTopic.contains("/"))
+      flattenedTopic = flattenedTopic.concat("/" + config.brokerId)
+    // flatten the topic, to remove the / and replace it with -
+    flattenedTopic = Utils.flattenTopic(flattenedTopic)
+
     var hasNewTopic = false
-    var parts = logs.get(topic)
+    var parts = logs.get(flattenedTopic)
     if (parts == null) {
-      val found = logs.putIfNotExists(topic, new Pool[Int, Log])
+      val found = logs.putIfNotExists(flattenedTopic, new Pool[Int, Log])
       if (found == null)
         hasNewTopic = true
-      parts = logs.get(topic)
+      parts = logs.get(flattenedTopic)
     }
     var log = parts.get(partition)
     if(log == null) {
-      log = createLog(topic, partition)
+      log = createLog(flattenedTopic, partition)
       Utils.registerMBean(new LogStats(log), "kafka:type=kafka.logs." + log.dir.getName)
       val found = parts.putIfNotExists(partition, log)
       if(found != null) {
@@ -180,11 +187,11 @@ class LogManager(val config: KafkaConfig,
         log = found
       }
       else
-        logger.info("Created log for '" + topic + "'-" + partition)
+        logger.info("Created log for '" + flattenedTopic + "'-" + partition)
     }
 
     if (hasNewTopic)
-      registerNewTopicInZK(topic)
+      registerNewTopicInZK(flattenedTopic.replaceAll("-", "/"))
     log
   }
   
@@ -263,6 +270,15 @@ class LogManager(val config: KafkaConfig,
   }
 
 
-  def getAllTopics(): Iterator[String] = logs.keys.iterator
+  def getAllTopics(): Iterator[String] = {
+    if(logger.isDebugEnabled) logger.debug("List of all topics on the broker : " +
+            logs.keys.map(t => t.replaceAll("-", "/")))
+    logs.keys.map(t => t.replaceAll("-", "/")).iterator
+  }
+
+  def getSubTopics(topic: String): Iterator[String] = {
+    getAllTopics.filter(t => t.startsWith(topic)).map(t => t.split("/").last)
+  }
+  
   def getTopicPartitionsMap() = topicPartitionsMap
 }

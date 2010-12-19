@@ -19,27 +19,26 @@ package kafka.producer.async
 import java.util.concurrent.LinkedBlockingQueue
 import kafka.utils.Utils
 import java.util.concurrent.atomic.AtomicBoolean
-import kafka.producer.SimpleProducer
 import kafka.serializer.SerDeser
 import org.apache.log4j.{Level, Logger}
+import kafka.producer.SimpleProducer
 
 object AsyncKafkaProducer {
   val shutdown = new Object
 }
 
-class AsyncKafkaProducer[T](config: ProducerConfig,
+class AsyncKafkaProducer[T](config: AsyncProducerConfig,
                             producer: SimpleProducer,
                             serializer: SerDeser[T]) {
-
   private val logger = Logger.getLogger(classOf[AsyncKafkaProducer[T]])
   private val closed = new AtomicBoolean(false)
-  private val queue = new LinkedBlockingQueue[T](config.queueSize)
+  private val queue = new LinkedBlockingQueue[QueueItem[T]](config.queueSize)
   private val handler = new EventHandler[T](producer, serializer)
   private val sendThread = new ProducerSendThread(queue, serializer, handler,
     config.queueTime, config.batchSize, AsyncKafkaProducer.shutdown)
   sendThread.setDaemon(false)
 
-  def this(config: ProducerConfig) {
+  def this(config: AsyncProducerConfig) {
     this(config,
       new SimpleProducer(config.host, config.port, config.bufferSize, config.connectTimeoutMs,config.reconnectInterval),
       Utils.getObject(config.serializerClass))
@@ -50,8 +49,21 @@ class AsyncKafkaProducer[T](config: ProducerConfig,
   def send(event: T) {
     if(closed.get)
       throw new QueueClosedException("Attempt to add event to a closed queue.")
+
+    val getTopic: (T) => String = serializer.getTopic
+    val added = queue.offer(new QueueItem(event, getTopic))
     
-    val added = queue.offer(event)
+    if(!added) {
+      logger.error("Event queue is full of unsent messages, could not send event: " + event.toString)
+      throw new QueueFullException("Event queue is full of unsent messages, could not send event: " + event.toString)
+    }
+  }
+
+  def send(event: T, topicSerializer: Function1[T, String]) {
+    if(closed.get)
+      throw new QueueClosedException("Attempt to add event to a closed queue.")
+
+    val added = queue.offer(new QueueItem(event, topicSerializer))
 
     if(!added) {
       logger.error("Event queue is full of unsent messages, could not send event: " + event.toString)
@@ -60,7 +72,7 @@ class AsyncKafkaProducer[T](config: ProducerConfig,
   }
 
   def close = {
-    queue.put(AsyncKafkaProducer.shutdown.asInstanceOf[T])
+    queue.put(new QueueItem(AsyncKafkaProducer.shutdown.asInstanceOf[T], null))
     sendThread.join(3000)
     sendThread.shutdown
     closed.set(true)
@@ -68,4 +80,9 @@ class AsyncKafkaProducer[T](config: ProducerConfig,
   
   // for testing only
   def setLoggerLevel(level: Level) = logger.setLevel(level)
+}
+
+class QueueItem[T](data: T, topicCbk: Function1[T, String]) {
+  def getData: T = data
+  def getTopicCallback:Function1[T, String] = topicCbk
 }

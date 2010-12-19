@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+*/
 
 package kafka.consumer
 
@@ -22,10 +22,11 @@ import scala.collection._
 import org.apache.log4j.Logger
 import kafka.cluster._
 import kafka.utils._
-import org.I0Itec.zkclient.exception.ZkNodeExistsException
 import java.net.InetAddress
 import org.I0Itec.zkclient.{IZkStateListener, IZkChildListener, ZkClient}
 import org.apache.zookeeper.Watcher.Event.KeeperState
+import org.I0Itec.zkclient.exception.{ZkNoNodeException, ZkNodeExistsException}
+import kafka.common.InvalidTopicNameException
 
 /**
  * This class handles the consumers interaction with zookeeper
@@ -148,9 +149,10 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
   }
 
   private def consume(topicCountMap: Map[String,Int]): Map[String,List[KafkaMessageStream]] = {
-    logger.debug("entering consume ")
+    logger.debug("entering consume")
     if (topicCountMap == null)
       throw new RuntimeException("topicCountMap is null")
+    topicCountMap.keys.foreach(t => Utils.validateTopicName(t))
 
     val dirs = new ZKGroupDirs(config.groupId)
     var ret = new mutable.HashMap[String,List[KafkaMessageStream]]
@@ -163,7 +165,8 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
         => consumerUuid = InetAddress.getLocalHost.getHostName + "-" + System.currentTimeMillis
     }
     val consumerIdString = config.groupId + "_" + consumerUuid
-    val topicCount = new TopicCount(consumerIdString, topicCountMap)
+    // revised topic count map based on sub topics
+    val topicCount = getTopicCount(consumerIdString, topicCountMap)
 
     // listener to consumer and partition changes
     val loadBalancerListener = new ZKRebalancerListener(config.groupId, consumerIdString)
@@ -180,7 +183,7 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
         streamList ::= new KafkaMessageStream(stream, config.consumerTimeoutMs)
       }           
       ret += (topic -> streamList)
-      logger.debug("adding topic " + topic + " and stream to map..")
+      logger.info("adding topic " + topic + " and stream to map..")
       
       // register on broker partition path changes
       val partitionPath = ZkUtils.brokerTopicsPath + "/" + topic
@@ -261,6 +264,48 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
   // for JMX
   def getConsumerGroup(): String = config.groupId
 
+  private def assignConsumersToSubTopics(topicConsumerMap : Map[String, Int]): Map[String, Int] = {
+    var nConsumersPerSubTopic = new mutable.HashMap[String, Int]()
+
+    topicConsumerMap.foreach { topicConsumers =>
+      val topic = topicConsumers._1
+      val numConsumers = topicConsumers._2
+      var subTopics: Seq[String] = null
+      try {
+        subTopics = ZkUtils.getSubTopics(zkClient, topic)
+      }catch {
+        case e: ZkNoNodeException => logger.warn("No sub topics found for topic: " + topic)
+        return nConsumersPerSubTopic ++= topicConsumerMap
+      }
+      val nConsumersPerTopic = numConsumers/subTopics.size
+      val nTopicsWithExtraConsumers = numConsumers % subTopics.size
+
+      subTopics.foreach { subTopic =>
+        val position = subTopics.indexOf(subTopic)
+        val extraConsumerTopicIndex = subTopics.size - position
+        val start = position*nConsumersPerTopic +
+                (if(extraConsumerTopicIndex > nTopicsWithExtraConsumers) 0 else 1)
+        val nConsumers = nConsumersPerTopic +
+                (if (nTopicsWithExtraConsumers - extraConsumerTopicIndex < 0) 0
+                else (nTopicsWithExtraConsumers - extraConsumerTopicIndex))
+
+        var numConsumersForThisSubTopic = 0
+        for(i <- start until (start + nConsumers))
+          numConsumersForThisSubTopic += 1
+        nConsumersPerSubTopic += (topic + "/" + subTopic -> numConsumersForThisSubTopic)
+      }
+    }
+    logger.info("Num consumers per sub topic => " + nConsumersPerSubTopic.toString)
+    nConsumersPerSubTopic
+  }
+
+  private def getTopicCount(consumerId: String, topicCountMap: Map[String, Int]) : TopicCount = {
+    var newTopicCountMap = assignConsumersToSubTopics(topicCountMap.filter(tc => !tc._1.contains("/")))
+    newTopicCountMap = newTopicCountMap ++ topicCountMap.filter(tc => tc._1.contains("/"))
+    // translate the top level topics to the individual sub topic list
+    new TopicCount(consumerId, newTopicCountMap)
+  }
+
   class ZKSessionExpireListenner(val dirs: ZKGroupDirs,
                                  val consumerIdString: String,
                                  val topicCount: TopicCount,
@@ -325,7 +370,7 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
       val consumersPerTopicMap = new mutable.HashMap[String, List[String]]
       for (consumer <- consumers) {
         val topicCount = getTopicCount(consumer)
-        for ((topic, consumerThreadIdSet) <- topicCount.getConsumerThreadIdsPerTopic()) {
+        for ((topic, consumerThreadIdSet) <- topicCount.getConsumerThreadIdsPerTopic) {
           for (consumerThreadId <- consumerThreadIdSet)
             consumersPerTopicMap.get(topic) match {
               case Some(curConsumers) => consumersPerTopicMap.put(topic, consumerThreadId :: curConsumers)
@@ -335,6 +380,7 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
       }
       for ( (topic, consumerList) <- consumersPerTopicMap )
         consumersPerTopicMap.put(topic, consumerList.sortWith((s,t) => s < t))
+      if(logger.isDebugEnabled) logger.debug("Final Consumer -> Topic assignment " + consumersPerTopicMap.toString)
       consumersPerTopicMap
     }
 
@@ -380,28 +426,22 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
     }
 
     private def rebalance(): Boolean = {
-      // testing code
-      //if ("group1_consumer1" == consumerIdString) {
-      //  logger.info("sleeping " + consumerIdString)
-      //  Thread.sleep(20)
-      //}
-
       val myTopicThreadIdsMap = getTopicCount(consumerIdString).getConsumerThreadIdsPerTopic
       val cluster = ZkUtils.getCluster(zkClient)
       val consumersPerTopicMap = getConsumersPerTopic(group)
       val partitionsPerTopicMap = ZkUtils.getPartitionsForTopics(zkClient, myTopicThreadIdsMap.keys.iterator)
-      val relevantTopicThreadIdsMap = getRelevantTopicMap(myTopicThreadIdsMap, partitionsPerTopicMap, oldPartitionsPerTopicMap, consumersPerTopicMap, oldConsumersPerTopicMap)
+      val relevantTopicThreadIdsMap = getRelevantTopicMap(myTopicThreadIdsMap, partitionsPerTopicMap,
+                                      oldPartitionsPerTopicMap, consumersPerTopicMap, oldConsumersPerTopicMap)
       if (relevantTopicThreadIdsMap.size <= 0) {
         logger.info("Consumer " + consumerIdString + " with " + consumersPerTopicMap + " doesn't need to rebalance.")
         return true
-      }
-
+      }else if(logger.isDebugEnabled) logger.debug("Relevant topic consumer map: " + relevantTopicThreadIdsMap.toString)
+      
       logger.info("Committing all offsets")
       commitOffsets
 
       logger.info("Releasing partition ownership")
       releasePartitionOwnership
-
 
       for ((topic, consumerThreadIdSet) <- relevantTopicThreadIdsMap) {
         topicRegistry.remove(topic)
@@ -409,12 +449,16 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
 
         val topicDirs = new ZKGroupTopicDirs(group, topic)
         val curConsumers = consumersPerTopicMap.get(topic).get
+        if(logger.isDebugEnabled) logger.debug("Current consumers for topic: " + topic + " are " + curConsumers.toString)
+        if(logger.isDebugEnabled) logger.debug("Fetching partitions for topic " + topic +
+                " from map " + partitionsPerTopicMap.toString)
         var curPartitions: List[String] = partitionsPerTopicMap.get(topic).get
 
         val nPartsPerConsumer = curPartitions.size / curConsumers.size
         val nConsumersWithExtraPart = curPartitions.size % curConsumers.size
 
-        logger.info("Consumer " + consumerIdString + " rebalancing the following partitions: " + curPartitions + " for topic " + topic + " with consumers: " + curConsumers)
+        logger.info("Consumer " + consumerIdString + " rebalancing the following partitions: " + curPartitions +
+                " for topic " + topic + " with consumers: " + curConsumers)
 
         for (consumerThreadId <- consumerThreadIdSet) {
           val myConsumerPosition = curConsumers.findIndexOf(_ == consumerThreadId)
@@ -461,6 +505,8 @@ class ZookeeperConsumerConnector(val config: ConsumerConfig,
                                  topic: String, consumerThreadId: String) : Boolean = {
       val partitionOwnerPath = topicDirs.consumerOwnerDir + "/" + partition
       try {
+        if(logger.isDebugEnabled) logger.debug("Creating partition owner path : " + partitionOwnerPath +
+                " for consumer: " + consumerThreadId)
         ZkUtils.createEphemeralPathExpectConflict(zkClient, partitionOwnerPath, consumerThreadId)
       }
       catch {

@@ -346,7 +346,7 @@ class Log(val dir: File, val maxSize: Long, val flushInterval: Int) {
   }
 
   def getTopicName():String = {
-    name.substring(0, name.lastIndexOf("-"))
+    name.substring(0, name.lastIndexOf("-")).replaceAll("-", "/")
   }
 
   def getLastFlushedTime():Long = {

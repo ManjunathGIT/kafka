@@ -35,15 +35,18 @@ class FetchRequest(val topic: String,
                    val partition: Int,
                    val offset: Long, 
                    val maxSize: Int) extends Request(RequestKeys.Fetch) {
+  // validate topic name
+  val validatedTopic = Utils.validateTopicName(topic)
   
   def writeTo(buffer: ByteBuffer) {
-    Utils.writeShortString(buffer, topic, "UTF-8")
+    Utils.writeShortString(buffer, validatedTopic, "UTF-8")
     buffer.putInt(partition)
     buffer.putLong(offset)
     buffer.putInt(maxSize)
   }
   
-  def sizeInBytes(): Int = 2 + topic.length + 4 + 8 + 4
+  def sizeInBytes(): Int = 2 + validatedTopic.length + 4 + 8 + 4
 
-  override def toString(): String= "topic:" + topic + ", part:" + partition +" offset:" + offset + " maxSize:" + maxSize  
+  override def toString(): String= "topic:" + validatedTopic + ", part:" + partition +" offset:" + offset +
+          " maxSize:" + maxSize  
 }

@@ -27,23 +27,24 @@ import javax.management._
 import java.util.Properties
 import scala.collection._
 import scala.collection.mutable
+import kafka.common.InvalidTopicNameException
 
 /**
  * Helper functions!
  */
 object Utils {
   private val logger = Logger.getLogger(getClass())
-  
+
   /**
    * Wrap the given function in a java.lang.Runnable
    * @param fun A function
    * @return A Runnable that just executes the function
    */
-  def runnable(fun: () => Unit): Runnable = 
+  def runnable(fun: () => Unit): Runnable =
     new Runnable() {
       def run() = fun()
     }
-  
+
   /**
    * Wrap the given function in a java.lang.Runnable that logs any errors encountered
    * @param fun A function
@@ -70,18 +71,18 @@ object Utils {
    * @param runnable The runnable to execute in the background
    * @return The unstarted thread
    */
-  def daemonThread(name: String, runnable: Runnable): Thread = 
+  def daemonThread(name: String, runnable: Runnable): Thread =
     newThread(name, runnable, true)
-  
+
   /**
    * Create a daemon thread
    * @param name The name of the thread
    * @param fun The runction to execute in the thread
    * @return The unstarted thread
    */
-  def daemonThread(name: String, fun: () => Unit): Thread = 
+  def daemonThread(name: String, fun: () => Unit): Thread =
     daemonThread(name, runnable(fun))
-  
+
   /**
    * Create a new thread
    * @param name The name of the thread
@@ -90,11 +91,11 @@ object Utils {
    * @return The unstarted thread
    */
   def newThread(name: String, runnable: Runnable, daemon: Boolean): Thread = {
-    val thread = new Thread(runnable, name) 
+    val thread = new Thread(runnable, name)
     thread.setDaemon(daemon)
     thread
   }
-   
+
   /**
    * Read a byte array from the given offset and size in the buffer
    * TODO: Should use System.arraycopy
@@ -108,7 +109,7 @@ object Utils {
     }
     bytes
   }
-  
+
   /**
    * Read size prefixed string where the size is stored as a 2 byte short.
    * @param buffer The buffer to read from
@@ -122,7 +123,7 @@ object Utils {
     buffer.get(bytes)
     new String(bytes, encoding)
   }
-  
+
   /**
    * Write a size prefixed string where the size is stored as a 2 byte short
    * @param buffer The buffer to write to
@@ -139,7 +140,7 @@ object Utils {
       buffer.put(string.getBytes(encoding))
     }
   }
-  
+
   /**
    * Read a properties file from the given path
    * @param filename The path of the file to read
@@ -150,7 +151,7 @@ object Utils {
     props.load(propStream)
     props
   }
-  
+
   /**
    * Read a required integer property value or throw an exception if no such property is found
    */
@@ -160,7 +161,7 @@ object Utils {
     else
       throw new IllegalArgumentException("Missing required property '" + name + "'")
   }
-  
+
   /**
    * Read an integer from the properties instance
    * @param props The properties to read from
@@ -168,9 +169,9 @@ object Utils {
    * @param default The default value to use if the property is not found
    * @return the integer value
    */
-  def getInt(props: Properties, name: String, default: Int): Int = 
+  def getInt(props: Properties, name: String, default: Int): Int =
     getIntInRange(props, name, default, (Int.MinValue, Int.MaxValue))
-  
+
   /**
    * Read an integer from the properties instance. Throw an exception 
    * if the value is not in the given range (inclusive)
@@ -182,17 +183,17 @@ object Utils {
    * @return the integer value
    */
   def getIntInRange(props: Properties, name: String, default: Int, range: (Int, Int)): Int = {
-    val v = 
-      if(props.containsKey(name))
-        props.getProperty(name).toInt
-      else
-        default
+    val v =
+    if(props.containsKey(name))
+      props.getProperty(name).toInt
+    else
+      default
     if(v < range._1 || v > range._2)
       throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + range + ".")
     else
       v
   }
-  
+
   /**
    * Read a boolean value from the properties instance
    * @param props The properties to read from
@@ -210,7 +211,7 @@ object Utils {
     else
       throw new IllegalArgumentException("Unacceptable value for property '" + name + "', boolean values must be either 'true' or 'false" )
   }
-  
+
   /**
    * Get a string property, or, if no such property is defined, return the given default value
    */
@@ -220,7 +221,7 @@ object Utils {
     else
       default
   }
-  
+
   /**
    * Get a string property or throw and exception if no such property is defined.
    */
@@ -230,7 +231,7 @@ object Utils {
     else
       throw new IllegalArgumentException("Missing required property '" + name + "'")
   }
-  
+
   /**
    * Open a channel for the given file
    */
@@ -240,7 +241,7 @@ object Utils {
     else
       new FileInputStream(file).getChannel()
   }
-  
+
   /**
    * Do the given action and log any exceptions thrown without rethrowing them
    * @param log The log method to use for logging. E.g. logger.warn
@@ -253,7 +254,7 @@ object Utils {
       case e: Throwable => log(e.getMessage(), e)
     }
   }
-  
+
   /**
    * Test if two byte buffers are equal. In this case equality means having
    * the same bytes from the current position to the limit
@@ -270,7 +271,7 @@ object Utils {
         return false
     return true
   }
-  
+
   /**
    * Translate the given buffer into a string
    * @param buffer The buffer to translate
@@ -281,7 +282,7 @@ object Utils {
     buffer.get(bytes)
     new String(bytes, encoding)
   }
-  
+
   /**
    * Print an error message and shutdown the JVM
    * @param message The error message
@@ -290,13 +291,13 @@ object Utils {
     System.err.println(message)
     System.exit(1)
   }
-  
+
   /**
    * Recursively delete the given file/directory and any subfiles (if any exist)
    * @param file The root file at which to begin deleting
    */
   def rm(file: String): Unit = rm(new File(file))
-  
+
   /**
    * Recursively delete the given file/directory and any subfiles (if any exist)
    * @param file The root file at which to begin deleting
@@ -315,7 +316,7 @@ object Utils {
       file.delete()
     }
   }
-  
+
   /**
    * Register the given mbean with the platform mbean server,
    * unregistering any mbean that was there before
@@ -331,7 +332,7 @@ object Utils {
       mbs.registerMBean(mbean, objName)
     }
   }
-  
+
   /**
    * Unregister the mbean with the given name, if there is one registered
    * @param name The mbean name to unregister
@@ -344,16 +345,16 @@ object Utils {
         mbs.unregisterMBean(objName)
     }
   }
-  
+
   /**
    * Read an unsigned integer from the current position in the buffer, 
    * incrementing the position by 4 bytes
    * @param The buffer to read from
    * @return The integer read, as a long to avoid signedness
    */
-  def getUnsignedInt(buffer: ByteBuffer): Long = 
+  def getUnsignedInt(buffer: ByteBuffer): Long =
     buffer.getInt() & 0xffffffffL
-  
+
   /**
    * Read an unsigned integer from the given position without modifying the buffers
    * position
@@ -361,33 +362,33 @@ object Utils {
    * @param index the index from which to read the integer
    * @return The integer read, as a long to avoid signedness
    */
-  def getUnsignedInt(buffer: ByteBuffer, index: Int): Long = 
+  def getUnsignedInt(buffer: ByteBuffer, index: Int): Long =
     buffer.getInt(index) & 0xffffffffL
-  
+
   /**
    * Write the given long value as a 4 byte unsigned integer. Overflow is ignored.
    * @param buffer The buffer to write to
    * @param value The value to write
    */
-  def putUnsignedInt(buffer: ByteBuffer, value: Long): Unit = 
+  def putUnsignedInt(buffer: ByteBuffer, value: Long): Unit =
     buffer.putInt((value & 0xffffffffL).asInstanceOf[Int])
-  
+
   /**
    * Write the given long value as a 4 byte unsigned integer. Overflow is ignored.
    * @param buffer The buffer to write to
    * @param index The position in the buffer at which to begin writing
    * @param value The value to write
    */
-  def putUnsignedInt(buffer: ByteBuffer, index: Int, value: Long): Unit = 
+  def putUnsignedInt(buffer: ByteBuffer, index: Int, value: Long): Unit =
     buffer.putInt(index, (value & 0xffffffffL).asInstanceOf[Int])
-  
+
   /**
    * Compute the CRC32 of the byte array
    * @param bytes The array to compute the checksum for
    * @return The CRC32
    */
   def crc32(bytes: Array[Byte]): Long = crc32(bytes, 0, bytes.length)
-  
+
   /**
    * Compute the CRC32 of the segment of the byte array given by the specificed size and offset
    * @param bytes The bytes to checksum
@@ -400,7 +401,7 @@ object Utils {
     crc.update(bytes, offset, size)
     crc.getValue()
   }
-  
+
   /**
    * Compute the hash code for the given items
    */
@@ -417,7 +418,7 @@ object Utils {
     }
     return h
   }
-  
+
   /**
    * Group the given values by keys extracted with the given function
    */
@@ -429,10 +430,10 @@ object Utils {
         case Some(l: List[V]) => m.put(k, v :: l)
         case None => m.put(k, List(v))
       }
-    } 
+    }
     m
   }
-  
+
   /**
    * Read some bytes into the provided buffer, and return the number of bytes read. If the 
    * channel has been closed or we get -1 on the read for any reason, throw an EOFException
@@ -442,8 +443,8 @@ object Utils {
       case -1 => throw new EOFException("Received -1 when reading from channel, socket has likely been closed.")
       case n: Int => n
     }
-  } 
-  
+  }
+
   def notNull[V](v: V) = {
     if(v == null)
       throw new IllegalArgumentException("Value cannot be null.")
@@ -458,7 +459,7 @@ object Utils {
 
   def getTopicPartition(topicPartition: String) : Tuple2[String, Int] = {
     val index = topicPartition.lastIndexOf('-')
-    (topicPartition.substring(0,index), topicPartition.substring(index+1).toInt)
+    (topicPartition.substring(0,index).replaceAll("-", "/"), topicPartition.substring(index+1).toInt)
   }
 
   def stackTrace(e: Throwable): String = {
@@ -479,13 +480,13 @@ object Utils {
     val csVals = allCSVals.split(",")
     for(i <- 0 until csVals.length)
     {
-     try{
-      val tempSplit = csVals(i).split(":")
-      logger.info(successMsg + tempSplit(0) + " : " + Integer.parseInt(tempSplit(1).trim))
-      map += tempSplit(0) -> Integer.parseInt(tempSplit(1).trim)
+      try{
+        val tempSplit = csVals(i).split(":")
+        logger.info(successMsg + tempSplit(0) + " : " + Integer.parseInt(tempSplit(1).trim))
+        map += tempSplit(0) -> Integer.parseInt(tempSplit(1).trim)
       } catch {
-          case _ =>  logger.error(exceptionMsg + ": " + csVals(i))
-        }
+        case _ =>  logger.error(exceptionMsg + ": " + csVals(i))
+      }
     }
     map
   }
@@ -494,7 +495,7 @@ object Utils {
     val exceptionMsg = "Malformed token for topic.flush.Intervals.ms in server.properties: "
     val successMsg =  "The flush interval for "
     getCSVMap(allIntervals, exceptionMsg, successMsg)
-   }
+  }
 
   def getTopicPartitions(allPartitions: String) : Map[String, Int] = {
     val exceptionMsg = "Malformed token for topic.partition.counts in server.properties: "
@@ -508,7 +509,38 @@ object Utils {
     val constructors = clazzT.getConstructors
     require(constructors.length == 1)
     constructors.head.newInstance().asInstanceOf[T]
-  }  
+  }
+
+  def flattenTopic(hierarchicalTopic: String): String = {
+    var topic = hierarchicalTopic
+    if(topic.startsWith("/"))
+      topic = topic.drop(1)
+    if(topic.endsWith("/"))
+      topic = topic.dropRight(1)
+
+    topic.replaceAll("/" , "-")
+  }
+
+  def validateTopicName(topic: String): String = {
+    var validatedTopic = topic
+    if(topic.contains("-"))
+      throw new InvalidTopicNameException(topic + ": Topic name cannot contain a -")
+    else {
+      // get rid of starting and trailing /
+      var validatedTopic = topic
+      if(validatedTopic.startsWith("/"))
+        validatedTopic = validatedTopic.drop(1)
+      if(validatedTopic.endsWith("/"))
+        validatedTopic = validatedTopic.dropRight(1)
+      // only level-2 topics are supported. Deeper hierarchies are not handled currently
+      val subTopics = validatedTopic.split("/")
+      if(subTopics.length > 2)
+        throw new InvalidTopicNameException(topic + ": Only topics of depth 2 are supported")
+      else
+        (true, "")
+    }
+    validatedTopic
+  }
 }
 
 class SnapshotStats(private val monitorDurationNs: Long = 30L * 1000L * 1000L * 1000L) {

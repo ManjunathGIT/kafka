@@ -24,6 +24,7 @@ import kafka.utils._
 import kafka.api._
 import scala.math._
 import org.apache.log4j.{Level, Logger}
+import kafka.common.InvalidTopicNameException
 
 object SimpleProducer {
   val RequestKey: Short = 0
@@ -33,12 +34,12 @@ object SimpleProducer {
  * Send a message set.
  */
 @threadsafe
-class SimpleProducer(val host: String, 
+class SimpleProducer(val host: String,
                      val port: Int,
                      val bufferSize: Int,
                      val connectTimeoutMs: Int,
                      val reconnectInterval: Int) {
-  
+
   private val logger = Logger.getLogger(getClass())
   private val MaxConnectBackoffMs = 60000
   private var channel : SocketChannel = null
@@ -53,6 +54,7 @@ class SimpleProducer(val host: String,
   def send(topic: String, partition: Int, messages: ByteBufferMessageSet) {
     lock synchronized {
       val startTime = SystemTime.nanoseconds
+      Utils.validateTopicName(topic)
       getOrMakeConnection()
       val setSize = messages.sizeInBytes.asInstanceOf[Int]
       if(logger.isTraceEnabled)
@@ -82,12 +84,13 @@ class SimpleProducer(val host: String,
       KafkaProducerStats.recordProduceRequest(endTime - startTime)
     }
   }
- 
+
   def send(topic: String, messages: ByteBufferMessageSet): Unit = send(topic, ProducerRequest.RandomPartition, messages)
-  
+
   def multiSend(produces: Array[ProducerRequest]) {
     lock synchronized {
       val startTime = SystemTime.nanoseconds
+      produces.foreach(r => Utils.validateTopicName(r.topic))
       getOrMakeConnection()
       val setSize = produces.foldLeft(0L)(_ + _.messages.sizeInBytes)
       if(logger.isTraceEnabled)
@@ -100,10 +103,10 @@ class SimpleProducer(val host: String,
           // retry once
           try {
             if(channel != null)
-            {
-              disconnect(channel)
-              channel = null
-            }
+              {
+                disconnect(channel)
+                channel = null
+              }
             channel = connect
           }catch {
             case ioe: java.io.IOException => channel = null; throw ioe;
@@ -112,7 +115,7 @@ class SimpleProducer(val host: String,
       sentOnConnection += 1
       if(sentOnConnection >= reconnectInterval) {
         disconnect(channel)
-        channel = null        
+        channel = null
         this.channel = connect()
         sentOnConnection = 0
       }
@@ -127,7 +130,7 @@ class SimpleProducer(val host: String,
     channel = null
     shutdown = true
   }
-    
+
   private def disconnect(channel: SocketChannel) {
     try {
       logger.debug("Disconnecting from " + host + ":" + port)
@@ -137,7 +140,7 @@ class SimpleProducer(val host: String,
       case e: Exception => logger.error("Error on disconnect: ", e)
     }
   }
-    
+
   private def connect(): SocketChannel = {
     var channel: SocketChannel = null
     var connectBackoffMs = 1
@@ -153,16 +156,16 @@ class SimpleProducer(val host: String,
       catch {
         case e: Exception => {
           if(channel != null)
-          {
-            disconnect(channel)
-            channel = null
-          }            
+            {
+              disconnect(channel)
+              channel = null
+            }
           val endTimeMs = SystemTime.milliseconds
           if ( (endTimeMs - beginTimeMs + connectBackoffMs) > connectTimeoutMs)
-          {
-            logger.error("Producer connection timing out after " + connectTimeoutMs + " ms")
-            throw e
-          }
+            {
+              logger.error("Producer connection timing out after " + connectTimeoutMs + " ms")
+              throw e
+            }
           logger.error("Connection attempt failed, next attempt in " + connectBackoffMs + " ms", e)
           SystemTime.sleep(connectBackoffMs)
           connectBackoffMs = min(10 * connectBackoffMs, MaxConnectBackoffMs)
@@ -179,7 +182,7 @@ class SimpleProducer(val host: String,
   }
 
   // for testing only
-  def setLoggerLevel(level: Level) = logger.setLevel(level)  
+  def setLoggerLevel(level: Level) = logger.setLevel(level)
 }
 
 trait KafkaProducerStatsMBean {

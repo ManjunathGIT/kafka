@@ -44,4 +44,8 @@ class MultiFetchRequest(val fetches: Array[FetchRequest]) extends Request(Reques
       size += fetch.sizeInBytes
     size
   }
+
+  override def toString(): String = {
+    fetches.foldLeft("")(_ + "[Request: " + _.toString + "],\t")
+  }
 }

@@ -193,16 +193,21 @@ object ZkUtils {
 
   def getPartitionsForTopics(zkClient: ZkClient, topics: Iterator[String]): mutable.Map[String, List[String]] = {
     val ret = new mutable.HashMap[String, List[String]]()
-    for (topic <- topics) {
+    val translatedTopics = attachSubTopics(zkClient, topics)
+    logger.info("Translated topics are : " + translatedTopics.toString)
+    translatedTopics.foreach { topic =>
       var partList: List[String] = Nil
       val brokers = ZkUtils.getChildren(zkClient, brokerTopicsPath + "/" + topic)
-      for (broker <- brokers) {
+      logger.info("Broker for topic " + topic + " is " + brokers.toList.toString)
+      brokers.foreach { broker =>
         val nParts = ZkUtils.readData(zkClient, brokerTopicsPath + "/" + topic + "/" + broker).toInt
+        logger.info("Numpartitions for topic " + topic + " on broker " + broker + " is " + nParts)
         for (part <- 0 until nParts)
           partList ::= broker + "-" + part
       }
       partList = partList.sortWith((s,t) => s < t)
       ret += (topic -> partList)
+      logger.info("Partition list for " + topic + " is " + partList.toString)      
     }
     ret
   }
@@ -220,6 +225,25 @@ object ZkUtils {
     zkClient.delete(brokerIdPath)
     val brokerPartTopicPath = brokerTopicsPath + "/" + topic + "/" + brokerId
     zkClient.delete(brokerPartTopicPath)
+  }
+
+  def attachSubTopics(zkClient: ZkClient, topics: Iterator[String]): List[String] = {
+    val partitionedTopics = topics.partition(t => t.contains("/"))
+    // add the hierarchical topics to the final topics list as is
+    var translatedTopics = partitionedTopics._1.toList
+    // for the non hierarchical topics, add the subtopic to the topic path
+    partitionedTopics._2.foreach { topic =>
+      val subTopics = ZkUtils.getChildren(zkClient, brokerTopicsPath + "/" + topic)
+      logger.info("Sub topics for topic " + topic + " are " + subTopics.toList.toString)
+      val newTopics = subTopics.map(s => (topic + "/" + s)).toList
+      logger.info("New topics for topic " + topic + " are " + newTopics.toString)
+      translatedTopics ++= newTopics
+    }
+    translatedTopics
+  }
+
+  def getSubTopics(zkClient: ZkClient, topic: String): Seq[String] = {
+    ZkUtils.getChildren(zkClient, brokerTopicsPath + "/" + topic)    
   }
 }
 
