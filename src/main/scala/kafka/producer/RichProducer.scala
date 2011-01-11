@@ -18,7 +18,7 @@ package kafka.producer
 import async.AsyncKafkaProducer
 import org.I0Itec.zkclient.{ZkClient, IZkChildListener}
 import kafka.utils.{StringSerializer, ZkUtils, Utils}
-import kafka.serializer.{Encoder, SerDeser}
+import kafka.serializer.Encoder
 
 class RichProducer[T](config: RichProducerConfig,
                       partitioner: Partitioner[T],

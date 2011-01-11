@@ -166,12 +166,13 @@ class AutoOffsetResetTest extends TestCase with ZooKeeperTestHarness {
   def testLatestOffsetResetForward() = {
     val producer = TestUtils.createProducer("localhost", brokerPort)
 
+    val fullTopic = topic + "/0"
     for(i <- 0 until numMessages) {
       producer.send(topic, TestUtils.singleMessageSet("test".getBytes()))
     }
 
     // update offset in zookeeper for consumer to jump "forward" in time
-    val dirs = new ZKGroupTopicDirs(group, topic)
+    val dirs = new ZKGroupTopicDirs(group, fullTopic)
     var consumerProps = TestUtils.createConsumerProperties(zkConnect, group, testConsumer)
     consumerProps.put("autooffset.reset", "largest")
     consumerProps.put("consumer.timeout.ms", "2000")
@@ -182,7 +183,7 @@ class AutoOffsetResetTest extends TestCase with ZooKeeperTestHarness {
 
 
     val consumerConnector: ConsumerConnector = Consumer.create(consumerConfig)
-    val messageStreams = consumerConnector.createMessageStreams(Map(topic -> 1))
+    val messageStreams = consumerConnector.createMessageStreams(Map(fullTopic -> 1))
 
     var threadList = List[Thread]()
     val nMessages : AtomicInteger = new AtomicInteger(0)

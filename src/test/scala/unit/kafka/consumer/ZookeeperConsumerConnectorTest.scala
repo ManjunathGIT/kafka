@@ -52,7 +52,7 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
   
   override def setUp() {
     super.setUp()
-    Thread.sleep(1000)
+    Thread.sleep(200)
   }
   
   @Test
@@ -78,6 +78,8 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
 
     // send some messages to each broker
     val sentMessages1 = sendMessages(nMessages, "batch1")
+    println("Test2: Sent messages: " + sentMessages1.size)
+    
     // create a consumer
     val consumerConfig1 = new ConsumerConfig(
       TestUtils.createConsumerProperties(zkConnect, group, consumer1))
@@ -103,7 +105,7 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
 
     // create a consumer with empty map
     val consumerConfig3 = new ConsumerConfig(
-      TestUtils.createConsumerProperties(zkConnect, group, consumer3))
+      TestUtils.createConsumerProperties(zkConnect, group, consumer3)) 
     val zkConsumerConnector3 = new ZookeeperConsumerConnector(consumerConfig3, true)
     val topicMessageStreams3 = zkConsumerConnector3.createMessageStreams(new mutable.HashMap[String, Int]())
     // send some messages to each broker
@@ -132,6 +134,8 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
         for (message <- ms)
           messages ::= message
         producer.send(topic, partition, mSet)
+        println("Sending " + ms.size + " messages for topic: " + topic + " on broker: " + conf.brokerId
+                + " at partition: " + partition)
       }
       producer.close()
     }
@@ -139,6 +143,7 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
   }
 
   def getMessages(nMessagesPerThread: Int, topicMessageStreams: Map[String,List[KafkaMessageStream]]): List[Message]= {
+    println("Trying to fetch only " + nMessagesPerThread + " messages per thread")
     var messages: List[Message] = Nil
     for ((topic, messageStreams) <- topicMessageStreams) {
       for (messageStream <- messageStreams) {
@@ -148,9 +153,11 @@ class ZookeeperConsumerConnectorTest extends TestCase with KafkaServerTestHarnes
           val message = iterator.next
           messages ::= message
           logger.debug("received message: " + Utils.toString(message.payload, "UTF-8"))
+          println("received message: " + Utils.toString(message.payload, "UTF-8"))
         }
       }
     }
+    println("Exited message receive loop !")
     messages.sortWith((s,t) => s.checksum < t.checksum)
   }
 }

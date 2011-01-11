@@ -59,6 +59,8 @@ class TopicCount(val consumerIdString: String, val topicCountMap: Map[String, In
     consumerThreadIdsPerTopicMap
   }
 
+  def getTopicCountMap: Map[String, Int] = topicCountMap
+  
   override def equals(obj: Any): Boolean = {
     obj match {
       case null => false

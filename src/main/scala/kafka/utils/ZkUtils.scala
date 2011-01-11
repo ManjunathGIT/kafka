@@ -191,8 +191,8 @@ object ZkUtils {
     cluster
   }
 
-  def getPartitionsForTopics(zkClient: ZkClient, topics: Iterator[String]): mutable.Map[String, List[String]] = {
-    val ret = new mutable.HashMap[String, List[String]]()
+  def getPartitionsForTopics(zkClient: ZkClient, topics: Iterator[String]): mutable.Map[String, Set[String]] = {
+    val ret = new mutable.HashMap[String, Set[String]]()
     val translatedTopics = attachSubTopics(zkClient, topics)
     logger.info("Translated topics are : " + translatedTopics.toString)
     translatedTopics.foreach { topic =>
@@ -206,7 +206,7 @@ object ZkUtils {
           partList ::= broker + "-" + part
       }
       partList = partList.sortWith((s,t) => s < t)
-      ret += (topic -> partList)
+      ret += (topic -> partList.toSet)
       logger.info("Partition list for " + topic + " is " + partList.toString)      
     }
     ret
@@ -216,26 +216,37 @@ object ZkUtils {
     val brokerIdPath = brokerIdsPath + "/" + brokerId
     val broker = new Broker(brokerId, brokerId.toString, host, port)
     createEphemeralPathExpectConflict(zkClient, brokerIdPath, broker.getZKString)
-    val brokerPartTopicPath = brokerTopicsPath + "/" + topic + "/" + brokerId
+    var newTopic = topic
+    if(newTopic.startsWith("/")) newTopic = newTopic.drop(1)
+    if(newTopic.endsWith("/")) newTopic = newTopic.dropRight(1)
+    var brokerPartTopicPath = brokerTopicsPath + "/" + newTopic + "/" + brokerId
+    if(!newTopic.contains("/"))
+      brokerPartTopicPath = brokerTopicsPath + "/" + newTopic + "/" + brokerId + "/" + brokerId
     createEphemeralPathExpectConflict(zkClient, brokerPartTopicPath, nParts.toString)    
   }
 
   def deletePartition(zkClient : ZkClient, brokerId: Int, topic: String) {
     val brokerIdPath = brokerIdsPath + "/" + brokerId
     zkClient.delete(brokerIdPath)
-    val brokerPartTopicPath = brokerTopicsPath + "/" + topic + "/" + brokerId
-    zkClient.delete(brokerPartTopicPath)
+    var newTopic = topic
+    if(newTopic.startsWith("/")) newTopic = newTopic.drop(1)
+    if(newTopic.endsWith("/")) newTopic = newTopic.dropRight(1)
+    var brokerPartTopicPath = brokerTopicsPath + "/" + newTopic + "/" + brokerId
+    if(!newTopic.contains("/"))
+      brokerPartTopicPath = brokerTopicsPath + "/" + newTopic + "/" + brokerId + "/" + brokerId
+    brokerPartTopicPath = brokerTopicsPath + "/" + topic + "/" + brokerId
+    deletePathRecursive(zkClient, brokerPartTopicPath)
   }
 
-  def attachSubTopics(zkClient: ZkClient, topics: Iterator[String]): List[String] = {
+  def attachSubTopics(zkClient: ZkClient, topics: Iterator[String]): Set[String] = {
     val partitionedTopics = topics.partition(t => t.contains("/"))
     // add the hierarchical topics to the final topics list as is
-    var translatedTopics = partitionedTopics._1.toList
+    var translatedTopics = partitionedTopics._1.toSet
     // for the non hierarchical topics, add the subtopic to the topic path
     partitionedTopics._2.foreach { topic =>
       val subTopics = ZkUtils.getChildren(zkClient, brokerTopicsPath + "/" + topic)
       logger.info("Sub topics for topic " + topic + " are " + subTopics.toList.toString)
-      val newTopics = subTopics.map(s => (topic + "/" + s)).toList
+      val newTopics = subTopics.map(s => (topic + "/" + s)).toSet
       logger.info("New topics for topic " + topic + " are " + newTopics.toString)
       translatedTopics ++= newTopics
     }

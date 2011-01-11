@@ -47,7 +47,7 @@ object UpdateOffsetsInZK {
     var partitions: List[String] = Nil
 
     partitionsPerTopicMap.get(topic) match {
-      case Some(l) =>  partitions = l.sortWith((s,t) => s < t)
+      case Some(l) =>  partitions = l.toList.sortWith((s,t) => s < t)
       case _ => throw new RuntimeException("Can't find topic " + topic)
     }
 
