@@ -90,6 +90,7 @@ object TestUtils {
    * @param config The configuration of the server
    */
   def createServer(config: KafkaConfig): KafkaServer = {
+    println("Creating kafka server at " + config.toString)
     val server = new KafkaServer(config)
     server.startup()
     server

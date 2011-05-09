@@ -26,11 +26,13 @@ trait ZooKeeperTestHarness extends JUnitSuite {
 
   @Before
   def setUp() {
+    println("Starting up zookeeper at " + zkConnect)
     zookeeper = new EmbeddedZookeeper(zkConnect)
   }
 
   @After
   def tearDown() {
+    println("Shutting down zookeeper at " + zkConnect)
     zookeeper.shutdown()
   }
 

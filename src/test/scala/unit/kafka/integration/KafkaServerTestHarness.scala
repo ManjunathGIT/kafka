@@ -38,11 +38,13 @@ trait KafkaServerTestHarness extends JUnitSuite {
   def init() {
     if(configs.size <= 0)
       throw new IllegalArgumentException("Must suply at least one server config.")
+    println("Starting up kafka server..")
     servers = configs.map(TestUtils.createServer(_))
   }
 
   @After
   def destroy() {
+    println("Shutting down kafka server..")
     servers.map(server => server.shutdown())
     servers.map(server => Utils.rm(server.config.logDir))
   }

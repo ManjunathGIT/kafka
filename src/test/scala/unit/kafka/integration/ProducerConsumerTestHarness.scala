@@ -31,6 +31,7 @@ trait ProducerConsumerTestHarness extends JUnitSuite {
 
     @Before
     def initialize() {
+      println("Starting up producer/consumer at " + host + ":" + port.toString)
       val props = new Properties()
       props.put("host", host)
       props.put("port", port.toString)
@@ -46,6 +47,7 @@ trait ProducerConsumerTestHarness extends JUnitSuite {
 
   @After
    def close() {
+    println("Shutting down producer/consumer at " + host + ":" + port.toString)
      producer.close()
      consumer.close()
    }
