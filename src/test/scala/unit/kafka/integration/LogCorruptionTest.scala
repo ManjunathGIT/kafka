@@ -18,7 +18,7 @@ import org.junit.{After, Before, Test}
 import kafka.integration.ProducerConsumerTestHarness
 import kafka.integration.KafkaServerTestHarness
 
-class LogCorruptionTest extends JUnitSuite with ProducerConsumerTestHarness with KafkaServerTestHarness with ZooKeeperTestHarness {
+class LogCorruptionTest extends JUnitSuite with ZooKeeperTestHarness with KafkaServerTestHarness with ProducerConsumerTestHarness {
   val zkConnect = TestZKUtils.zookeeperConnect  
   val port = 9999
   val props = TestUtils.createBrokerConfig(0, port)

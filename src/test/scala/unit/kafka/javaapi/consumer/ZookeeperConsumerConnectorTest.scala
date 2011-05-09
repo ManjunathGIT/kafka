@@ -32,7 +32,7 @@ import kafka.javaapi.message.ByteBufferMessageSet
 import kafka.consumer.{Consumer, ConsumerConfig, KafkaMessageStream, ConsumerTimeoutException}
 import javax.management.NotCompliantMBeanException
 
-class ZookeeperConsumerConnectorTest extends JUnitSuite with KafkaServerTestHarness with ZooKeeperTestHarness {
+class ZookeeperConsumerConnectorTest extends JUnitSuite with ZooKeeperTestHarness with KafkaServerTestHarness {
   private val logger = Logger.getLogger(getClass())
 
   val zookeeperConnect = TestZKUtils.zookeeperConnect
