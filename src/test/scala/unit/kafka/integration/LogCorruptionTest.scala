@@ -31,6 +31,9 @@ class LogCorruptionTest extends JUnitSuite with ProducerConsumerTestHarness with
 
   @Test
   def testMessageSizeTooLarge() {
+    // wait for kafka server to come up
+    Thread.sleep(200)
+
     // send some messages
     val sent1 = new ByteBufferMessageSet(new Message("hello".getBytes()))
     producer.send(topic, sent1)
